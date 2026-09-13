@@ -22,7 +22,7 @@ export const worker = new Worker<EmailJob>(EMAIL_QUEUE, async (job) => {
   const email = rows[0];
   if (!email || email.status === "sent" || email.status === "failed" || email.status === "sending") return;
 
-  const rate = await reserveHourlySlot(email.sender, config.maxPerHour);
+  const rate = await reserveHourlySlot(email.sender, email.hourly_limit ?? config.maxPerHour);
   if (!rate.allowed) {
     await db.query("UPDATE email_messages SET status = 'deferred', scheduled_at = to_timestamp($2 / 1000.0), updated_at = now() WHERE id = $1 AND status <> 'sent'", [email.id, rate.retryAt]);
     await enqueueEmail(email.id, new Date(rate.retryAt), `rate-${rate.retryAt}`);

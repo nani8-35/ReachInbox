@@ -13,9 +13,10 @@ export async function migrate(db: Pool) {
       recipient text NOT NULL, sender text NOT NULL, subject text NOT NULL, body text NOT NULL,
       scheduled_at timestamptz NOT NULL, sent_at timestamptz, status text NOT NULL DEFAULT 'scheduled'
         CHECK (status IN ('scheduled','deferred','sending','sent','failed')),
-      error_message text, provider_message_id text, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
+      hourly_limit integer, error_message text, provider_message_id text, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
     );
     ALTER TABLE email_messages ADD COLUMN IF NOT EXISTS queue_enqueued boolean NOT NULL DEFAULT false;
+    ALTER TABLE email_messages ADD COLUMN IF NOT EXISTS hourly_limit integer;
     CREATE INDEX IF NOT EXISTS email_messages_user_status_scheduled_idx ON email_messages(user_id, status, scheduled_at);
     CREATE INDEX IF NOT EXISTS email_messages_sender_idx ON email_messages(sender);
   `);
