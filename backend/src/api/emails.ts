@@ -13,10 +13,10 @@ emailRouter.use(requireUser);
 emailRouter.post("/schedule", async (req, res, next) => { try {
   const input = scheduleSchema.parse(req.body); const startAt = new Date(input.startAt); if (startAt.getTime() < Date.now() - 1000) return res.status(400).json({ error: "Start time must be in the future" });
   const recipients = [...new Set(input.recipients.map((item) => item.toLowerCase()))]; const client = await db.connect();
-  try { await client.query("BEGIN"); const ids: Array<{ id: string; scheduled_at: Date }> = [];
-    for (const [position, recipient] of recipients.entries()) { const scheduledAt = new Date(startAt.getTime() + position * input.delaySeconds * 1000); const result = await client.query<{ id: string; scheduled_at: Date }>("INSERT INTO email_messages (user_id,recipient,sender,subject,body,scheduled_at,hourly_limit) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id,scheduled_at", [req.user!.id, recipient, input.sender, input.subject, input.body, scheduledAt, input.hourlyLimit]); ids.push(result.rows[0]); }
-    await client.query("COMMIT"); await Promise.all(ids.map(async (row) => { await enqueueEmail(row.id, row.scheduled_at); await db.query("UPDATE email_messages SET queue_enqueued = true, updated_at = now() WHERE id = $1", [row.id]); }));
-    res.status(201).json({ scheduled: ids.length });
+  try { await client.query("BEGIN"); const emails: Array<Record<string, unknown> & { id: string; scheduled_at: Date }> = [];
+    for (const [position, recipient] of recipients.entries()) { const scheduledAt = new Date(startAt.getTime() + position * input.delaySeconds * 1000); const result = await client.query<Record<string, unknown> & { id: string; scheduled_at: Date }>("INSERT INTO email_messages (user_id,recipient,sender,subject,body,scheduled_at,hourly_limit) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *", [req.user!.id, recipient, input.sender, input.subject, input.body, scheduledAt, input.hourlyLimit]); emails.push(result.rows[0]); }
+    await client.query("COMMIT"); await Promise.all(emails.map(async (row) => { await enqueueEmail(row.id, row.scheduled_at); await db.query("UPDATE email_messages SET queue_enqueued = true, updated_at = now() WHERE id = $1", [row.id]); await indexEmail(row); }));
+    res.status(201).json({ scheduled: emails.length });
   } catch (error) { await client.query("ROLLBACK"); throw error; } finally { client.release(); }
 } catch (error) { next(error); } });
 

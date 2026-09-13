@@ -31,7 +31,11 @@ The worker is configured through `WORKER_CONCURRENCY` (default `5`). It claims a
 
 The design uses no in-memory rate counters, no cron jobs, and no restart “re-seeding,” so a restart does not create duplicate jobs.
 
-Elasticsearch is initialized at startup and used for indexed recipient/subject search. If it is still starting during a local Docker download, scheduling and SMTP delivery remain available and the list endpoint temporarily falls back to a PostgreSQL search; restart the API after Elasticsearch becomes healthy to enable the index.
+Elasticsearch indexes every message as soon as it is scheduled, then receives status updates after delivery. If it is still starting during a local Docker download, scheduling and SMTP delivery remain available and the list endpoint temporarily falls back to a PostgreSQL search; restart the API after Elasticsearch becomes healthy to enable the index.
+
+## Deployment processes
+
+For local development, `npm run dev -w backend` starts both the API and worker. For a managed host, run `npm run start -w backend` with `RUN_WORKER_IN_API=false` for the web API, and run `npm run start:worker -w backend` as a separate private worker service.
 
 ## API
 

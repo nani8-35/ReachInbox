@@ -3,7 +3,7 @@ import nodemailer from "nodemailer";
 import { config } from "../config.js";
 import { db } from "../db/client.js";
 import { indexEmail } from "../search/emailSearch.js";
-import { reserveHourlySlot, reserveSenderGap } from "../rateLimiter/hourlyLimiter.js";
+import { nextHour, reserveHourlySlot, reserveSenderGap } from "../rateLimiter/hourlyLimiter.js";
 import { EMAIL_QUEUE, emailQueue, type EmailJob, enqueueEmail } from "./emailQueue.js";
 import { redis } from "./connection.js";
 
@@ -14,10 +14,16 @@ async function notifyRateLimit(userId: string, sender: string) {
   const token = rows[0]?.slack_access_token ?? process.env.SLACK_BOT_TOKEN;
   const channel = process.env.SLACK_ALERT_CHANNEL;
   if (!token || !channel) return;
+  const key = `rate-limit-notified:${userId}:${sender}:${Math.floor(Date.now() / 3_600_000)}`;
+  const firstHit = await redis.set(key, "1", "PXAT", nextHour(), "NX");
+  if (!firstHit) return;
   await fetch("https://slack.com/api/chat.postMessage", { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ channel, text: `Hourly sending limit reached for ${sender}. Remaining emails were deferred to the next hour.` }) });
 }
 
-export const worker = new Worker<EmailJob>(EMAIL_QUEUE, async (job) => {
+let worker: Worker<EmailJob> | undefined;
+export function startWorker() {
+  if (worker) return worker;
+  worker = new Worker<EmailJob>(EMAIL_QUEUE, async (job) => {
   const { rows } = await db.query<any>("SELECT * FROM email_messages WHERE id = $1", [job.data.emailId]);
   const email = rows[0];
   if (!email || email.status === "sent" || email.status === "failed" || email.status === "sending") return;
@@ -48,6 +54,8 @@ export const worker = new Worker<EmailJob>(EMAIL_QUEUE, async (job) => {
     await indexEmail(updated.rows[0]);
     throw error;
   }
-}, { connection: redis, concurrency: config.workerConcurrency });
+  }, { connection: redis, concurrency: config.workerConcurrency });
 
-worker.on("failed", (job, error) => console.error(`Email job ${job?.id} failed:`, error.message));
+  worker.on("failed", (job, error) => console.error(`Email job ${job?.id} failed:`, error.message));
+  return worker;
+}
