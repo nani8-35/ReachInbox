@@ -1,0 +1,12 @@
+{
+  "name": "email-job-scheduler",
+  "private": true,
+  "workspaces": ["backend", "frontend"],
+  "scripts": {
+    "dev": "concurrently \"npm run dev -w backend\" \"npm run dev -w frontend\"",
+    "build": "npm run build -w backend && npm run build -w frontend",
+    "test": "npm run test -w backend",
+    "start": "npm run start -w backend"
+  },
+  "devDependencies": { "concurrently": "^9.1.2" }
+}

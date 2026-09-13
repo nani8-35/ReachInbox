@@ -1,0 +1,19 @@
+import { useEffect, useState } from "react";
+import { createRoot } from "react-dom/client";
+import { Plus, CalendarClock, Send } from "lucide-react";
+import "./styles.css";
+import { api, apiUrl } from "./lib/api";
+import type { Email, User } from "./types";
+import { Header } from "./components/Header";
+import { ComposeModal } from "./components/ComposeModal";
+import { EmailTable } from "./components/EmailTable";
+
+function App() { const [user, setUser] = useState<User | null>(null); const [slack, setSlack] = useState(false); const [active, setActive] = useState<"scheduled" | "sent">("scheduled"); const [emails, setEmails] = useState<Email[]>([]); const [loading, setLoading] = useState(true); const [compose, setCompose] = useState(false); const [query, setQuery] = useState(""); const [error, setError] = useState("");
+  useEffect(() => { api.me().then(({ user, slackConnected }) => { setUser(user); setSlack(slackConnected); }).catch(() => location.assign(`${apiUrl}/api/auth/google`)); }, []);
+  useEffect(() => { if (!user) return; setLoading(true); const timer = setTimeout(() => api.emails(active, query).then(({ emails }) => setEmails(emails)).catch((err) => setError(err.message)).finally(() => setLoading(false)), 250); return () => clearTimeout(timer); }, [active, query, user]);
+  async function schedule(input: Parameters<typeof api.schedule>[0]) { await api.schedule(input); setActive("scheduled"); const result = await api.emails("scheduled", query); setEmails(result.emails); }
+  async function logout() { await api.logout(); location.assign(`${apiUrl}/api/auth/google`); }
+  if (!user) return <main className="grid min-h-screen place-items-center bg-slate-50 text-slate-500">Loading your workspace…</main>;
+  return <main className="min-h-screen bg-[#f8f9fc]"><Header user={user} slackConnected={slack} onLogout={logout}/><div className="mx-auto max-w-6xl px-5 py-9 sm:px-9"><div className="mb-8 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between"><div><p className="mb-2 text-sm font-medium text-brand">CAMPAIGN DELIVERY</p><h1 className="text-3xl font-bold tracking-tight text-ink">Email scheduler</h1><p className="mt-2 text-slate-500">Plan outreach with dependable, paced delivery.</p></div><button onClick={() => setCompose(true)} className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-700"><Plus size={18}/>Compose new email</button></div><div className="mb-6 flex gap-2 border-b border-slate-200"><Tab active={active === "scheduled"} onClick={() => setActive("scheduled")} icon={<CalendarClock size={16}/>} label="Scheduled emails"/><Tab active={active === "sent"} onClick={() => setActive("sent")} icon={<Send size={16}/>} label="Sent emails"/></div>{error && <p className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}<EmailTable emails={emails} kind={active} loading={loading} search={query} onSearch={setQuery}/><p className="mt-4 text-center text-xs text-slate-400">Queue activity is available at <a className="underline" href={`${apiUrl}/queues`} target="_blank">the operations dashboard</a>.</p></div>{compose && <ComposeModal onClose={() => setCompose(false)} onSchedule={schedule}/>}</main> }
+function Tab({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) { return <button onClick={onClick} className={`-mb-px flex items-center gap-2 border-b-2 px-3 py-3 text-sm font-semibold ${active ? "border-brand text-brand" : "border-transparent text-slate-500 hover:text-slate-800"}`}>{icon}{label}</button> }
+createRoot(document.getElementById("root")!).render(<App/>);
